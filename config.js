@@ -47,6 +47,10 @@ var CONFIG = {
     
     // Proxy server for Wiener Linien API (to handle CORS issues)
     // Your proxy server URL
-    wienerLinienProxy: 'https://wienerlinien-proxy.people-02-reasons.workers.dev'
+    wienerLinienProxy: 'https://wienerlinien-proxy.people-02-reasons.workers.dev',
+    
+    // Proxy server for Geosphere API (to handle CORS issues)
+    // Your Geosphere proxy server URL
+    geosphereProxy: 'https://geosphere.people-02-reasons.workers.dev'
 };
 

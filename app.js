@@ -83,96 +83,147 @@ function getLineColor(lineName, vehicleType) {
 }
 
 // Get weather data from Geosphere Austria API
+// Documentation: https://dataset.api.hub.geosphere.at/v1/docs/
 function fetchWeather() {
-    // Geosphere API has CORS issues and cannot be accessed directly from browser
-    // Show a simple message that weather is unavailable
-    // To fix this, you would need a proxy server similar to the Wiener Linien proxy
-    document.getElementById('weather').innerHTML = 
-        '<div class="weather-error">Wetterdaten derzeit nicht verfügbar</div>';
+    // Geosphere Austria Dataset API - TAWES weather stations
+    // Station 11035 = Wien-Hohe Warte (main Vienna weather station)
+    // Parameters: TL (temperature), RF (humidity), FF (wind speed)
+    var stationId = CONFIG.geosphereStationId || '11035';
+    
+    // Correct Geosphere API endpoint structure:
+    // https://dataset.api.hub.geosphere.at/v1/station/current/tawes-v1-10min?parameters=TL,RF,FF&station_ids=11035&output_format=json
+    var apiUrl = 'https://dataset.api.hub.geosphere.at/v1/station/current/tawes-v1-10min?parameters=TL,RF,FF&station_ids=' + 
+                 stationId + '&output_format=json';
+    
+    // Use proxy if configured, otherwise try direct API call
+    var url;
+    if (CONFIG.geosphereProxy) {
+        // Proxy expects the Geosphere API URL as a parameter
+        // Format: proxy?url=ENCODED_API_URL
+        var proxyBase = CONFIG.geosphereProxy.replace(/\/$/, ''); // Remove trailing slash
+        url = proxyBase + '?url=' + encodeURIComponent(apiUrl);
+    } else {
+        url = apiUrl;
+    }
+    
+    console.log('Fetching weather from:', url);
+    console.log('Geosphere API URL:', apiUrl);
+    console.log('Proxy base URL:', CONFIG.geosphereProxy);
+    
+    makeRequest(url, function(data) {
+        console.log('Weather data received:', data);
+        // Check if the response is actually an error message
+        if (data && typeof data === 'object') {
+            if (data.error || (data.message && data.message !== 'OK')) {
+                console.log('Proxy returned error:', data);
+                var errorText = data.error || data.message || 'Unbekannter Fehler';
+                document.getElementById('weather').innerHTML = 
+                    '<div class="weather-error">Wetterdaten konnten nicht geladen werden: ' + 
+                    errorText + '</div>';
+                return;
+            }
+        }
+        displayGeosphereWeather(data);
+    }, function(error) {
+        console.log('Weather fetch error:', error);
+        // Show error message with more details
+        if (!CONFIG.geosphereProxy) {
+            document.getElementById('weather').innerHTML = 
+                '<div class="weather-error">Wetterdaten benötigen Proxy-Server (CORS-Fehler)</div>';
+        } else {
+            // Check if it's a 404 - proxy might not be configured correctly
+            var errorMsg = error;
+            var helpText = '';
+            if (error.indexOf('404') !== -1 || error.indexOf('Not Found') !== -1) {
+                errorMsg = 'Proxy-Server antwortet nicht (404)';
+                helpText = '<br><small style="opacity: 0.7;">Hinweis: Der Proxy-Server existiert möglicherweise nicht oder ist nicht korrekt konfiguriert. Bitte überprüfen Sie die Proxy-URL in config.js und stellen Sie sicher, dass der Cloudflare Worker bereitgestellt wurde.</small>';
+            } else if (error.indexOf('CORS') !== -1) {
+                errorMsg = 'CORS-Fehler beim Proxy';
+                helpText = '<br><small style="opacity: 0.7;">Der Proxy muss CORS-Header setzen. Bitte überprüfen Sie die Proxy-Konfiguration.</small>';
+            }
+            document.getElementById('weather').innerHTML = 
+                '<div class="weather-error">Wetterdaten konnten nicht geladen werden: ' + errorMsg + helpText + '</div>';
+        }
+    });
 }
 
-// Display weather data from Geosphere API
+// Display weather data from Geosphere TAWES API
+// TAWES API returns: { "timestamps": [...], "parameters": { "TL": { "11035": [...] }, "RF": { "11035": [...] } } }
 function displayGeosphereWeather(data) {
     var weatherHtml = '<div class="weather-info">';
     
-    // Geosphere API response structure may vary, handle different formats
-    var temp, humidity, description, icon;
+    var temp = null;
+    var humidity = null;
+    var windSpeed = null;
+    var icon = '🌤️';
+    var description = 'Aktuelles Wetter';
     
-    // Try to extract data from different possible response structures
-    if (data.temperature) {
-        temp = data.temperature;
-    } else if (data.temp) {
-        temp = data.temp;
-    } else if (data.observations && data.observations.length > 0) {
-        temp = data.observations[0].temperature || data.observations[0].temp;
-        humidity = data.observations[0].humidity || data.observations[0].relative_humidity;
-    } else if (data.data && data.data.temperature) {
-        temp = data.data.temperature;
-        humidity = data.data.humidity || data.data.relative_humidity;
+    // Parse TAWES API response structure
+    // Format: { "timestamps": [...], "parameters": { "TL": { "11035": [value] }, "RF": { "11035": [value] }, "FF": { "11035": [value] } } }
+    if (data.parameters) {
+        var stationId = CONFIG.geosphereStationId || '11035';
+        
+        // TL = Temperature (Lufttemperatur)
+        if (data.parameters.TL && data.parameters.TL[stationId] && data.parameters.TL[stationId].length > 0) {
+            temp = data.parameters.TL[stationId][data.parameters.TL[stationId].length - 1]; // Get latest value
+        }
+        
+        // RF = Relative Humidity (Relative Feuchte)
+        if (data.parameters.RF && data.parameters.RF[stationId] && data.parameters.RF[stationId].length > 0) {
+            humidity = data.parameters.RF[stationId][data.parameters.RF[stationId].length - 1]; // Get latest value
+        }
+        
+        // FF = Wind Speed (Windgeschwindigkeit)
+        if (data.parameters.FF && data.parameters.FF[stationId] && data.parameters.FF[stationId].length > 0) {
+            windSpeed = data.parameters.FF[stationId][data.parameters.FF[stationId].length - 1]; // Get latest value
+        }
     }
     
-    if (data.humidity) {
-        humidity = data.humidity;
-    } else if (data.relative_humidity) {
-        humidity = data.relative_humidity;
+    // Determine weather icon based on temperature and conditions
+    if (temp !== null && temp !== undefined) {
+        if (temp > 25) {
+            icon = '☀️';
+            description = 'Warm';
+        } else if (temp > 15) {
+            icon = '🌤️';
+            description = 'Mild';
+        } else if (temp > 5) {
+            icon = '☁️';
+            description = 'Kühl';
+        } else if (temp > 0) {
+            icon = '🌨️';
+            description = 'Kalt';
+        } else {
+            icon = '❄️';
+            description = 'Sehr kalt';
+        }
     }
     
-    // Determine weather description and icon
-    if (data.weather_description) {
-        description = data.weather_description;
-    } else if (data.description) {
-        description = data.description;
-    } else if (data.condition) {
-        description = data.condition;
-    } else {
-        description = 'Aktuelles Wetter';
-    }
-    
-    // Weather icon based on conditions
-    var descLower = description.toLowerCase();
-    if (descLower.indexOf('sonnig') !== -1 || descLower.indexOf('klar') !== -1 || descLower.indexOf('clear') !== -1) {
-        icon = '☀️';
-    } else if (descLower.indexOf('bewölkt') !== -1 || descLower.indexOf('cloud') !== -1) {
-        icon = '☁️';
-    } else if (descLower.indexOf('regen') !== -1 || descLower.indexOf('rain') !== -1) {
-        icon = '🌧️';
-    } else if (descLower.indexOf('schnee') !== -1 || descLower.indexOf('snow') !== -1) {
-        icon = '❄️';
-    } else if (descLower.indexOf('gewitter') !== -1 || descLower.indexOf('thunder') !== -1) {
-        icon = '⛈️';
-    } else if (descLower.indexOf('nebel') !== -1 || descLower.indexOf('fog') !== -1) {
-        icon = '🌫️';
-    } else {
-        icon = '🌤️';
-    }
-    
-    // Display temperature
-    if (temp !== undefined && temp !== null) {
+    // Display weather data
+    if (temp !== null && temp !== undefined) {
         weatherHtml += '<span class="weather-icon">' + icon + '</span>';
         weatherHtml += '<span class="weather-temp">' + Math.round(temp) + '°C</span>';
         weatherHtml += '<div class="weather-details">';
         weatherHtml += '<div class="weather-desc">' + description + '</div>';
         weatherHtml += '<div class="weather-extra">';
         
-        if (humidity !== undefined && humidity !== null) {
+        if (humidity !== null && humidity !== undefined) {
             weatherHtml += 'Luftfeuchtigkeit: ' + Math.round(humidity) + '%';
         }
         
-        // Add wind information if available
-        if (data.wind_speed) {
-            weatherHtml += ' | Wind: ' + Math.round(data.wind_speed) + ' km/h';
-        } else if (data.wind && data.wind.speed) {
-            weatherHtml += ' | Wind: ' + Math.round(data.wind.speed) + ' km/h';
+        if (windSpeed !== null && windSpeed !== undefined) {
+            if (humidity !== null) weatherHtml += ' | ';
+            weatherHtml += 'Wind: ' + Math.round(windSpeed) + ' km/h';
         }
         
         weatherHtml += '</div>';
         weatherHtml += '</div>';
     } else {
-        // Fallback if temperature not found
+        // No data available
         weatherHtml += '<span class="weather-icon">' + icon + '</span>';
         weatherHtml += '<div class="weather-details">';
         weatherHtml += '<div class="weather-desc">' + description + '</div>';
-        weatherHtml += '<div class="weather-extra">Wetterdaten verfügbar</div>';
+        weatherHtml += '<div class="weather-extra">Daten werden geladen...</div>';
         weatherHtml += '</div>';
     }
     
@@ -450,14 +501,11 @@ function updateLastUpdateTime() {
         minute: '2-digit', 
         second: '2-digit' 
     });
-    document.getElementById('lastUpdate').textContent = 'Letzte Aktualisierung: ' + timeString;
+    document.getElementById('lastUpdate').textContent = timeString;
 }
 
 // Refresh all data
 function refreshAll() {
-    // Weather disabled due to CORS issues with Geosphere API
-    // fetchWeather();
-    
     for (var i = 0; i < CONFIG.stations.length; i++) {
         fetchStationData(CONFIG.stations[i].id, i);
     }
