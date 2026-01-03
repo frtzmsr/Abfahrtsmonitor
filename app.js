@@ -41,45 +41,54 @@ function formatTime(minutes) {
     }
 }
 
+// Get Wiener Linien official color for a line
+// Based on: https://github.com/thoebert/Wiener-Linien-HA-Dashboard
+function getLineColor(lineName, vehicleType) {
+    var line = lineName.toUpperCase().trim();
+    
+    // Check for U-Bahn lines
+    if (line === 'U1') return '#e3000f';
+    if (line === 'U2') return '#a862a4';
+    if (line === 'U3') return '#db7607';
+    if (line === 'U4') return '#01963e';
+    if (line === 'U5') return '#008f95';
+    if (line === 'U6') return '#9d6830';
+    
+    // Check vehicle type from API
+    if (vehicleType) {
+        if (vehicleType === 'ptTram') return '#c00a09'; // Tram
+        if (vehicleType === 'ptBusCity' || vehicleType === 'ptBus') return '#0b295d'; // Bus
+        if (vehicleType === 'ptMetro') {
+            // Metro - determine by line name
+            if (line.indexOf('U1') !== -1) return '#e3000f';
+            if (line.indexOf('U2') !== -1) return '#a862a4';
+            if (line.indexOf('U3') !== -1) return '#db7607';
+            if (line.indexOf('U4') !== -1) return '#01963e';
+            if (line.indexOf('U5') !== -1) return '#008f95';
+            if (line.indexOf('U6') !== -1) return '#9d6830';
+        }
+    }
+    
+    // Check if line name contains S-Bahn indicators
+    if (line.indexOf('S') === 0 && line.length <= 3) return '#0089c4'; // S-Bahn
+    
+    // Check for tram lines (usually numbers or numbers with letters, but not U/S)
+    if (/^\d+[A-Z]?$/.test(line) && line.indexOf('U') === -1 && line.indexOf('S') === -1) {
+        // Could be tram or bus - default to tram red
+        return '#c00a09';
+    }
+    
+    // Default: Bus color
+    return '#0b295d';
+}
+
 // Get weather data from Geosphere Austria API
 function fetchWeather() {
-    // Geosphere Austria provides weather data through their dataset API
-    // Documentation: https://dataset.api.hub.geosphere.at/v1/docs/
-    // Using Wien-Hohe Warte station (ID: 11035) which is the main Vienna weather station
-    var stationId = CONFIG.geosphereStationId || '11035';
-    
-    // Try multiple possible Geosphere API endpoints
-    // The exact endpoint structure may vary depending on the API version
-    // If these don't work, check the official documentation and update accordingly
-    var endpoints = [
-        // Option 1: Direct station observation endpoint
-        'https://dataset.api.hub.geosphere.at/v1/weather/observation/' + stationId,
-        // Option 2: Dataset-based endpoint
-        'https://dataset.api.hub.geosphere.at/v1/datasets/weather/current?station=' + stationId,
-        // Option 3: Location-based endpoint
-        'https://dataset.api.hub.geosphere.at/v1/weather/observation?lat=' + 
-            CONFIG.latitude + '&lon=' + CONFIG.longitude,
-        // Option 4: Alternative dataset endpoint format
-        'https://dataset.api.hub.geosphere.at/v1/datasets/observation/current?station_id=' + stationId
-    ];
-    
-    tryEndpoint(0);
-    
-    function tryEndpoint(index) {
-        if (index >= endpoints.length) {
-            // All endpoints failed, show error
-            document.getElementById('weather').innerHTML = 
-                '<div class="weather-error">Wetterdaten konnten nicht geladen werden. Bitte API-Endpunkt in app.js überprüfen.</div>';
-            return;
-        }
-        
-        makeRequest(endpoints[index], function(data) {
-            displayGeosphereWeather(data);
-        }, function(error) {
-            // Try next endpoint
-            tryEndpoint(index + 1);
-        });
-    }
+    // Geosphere API has CORS issues and cannot be accessed directly from browser
+    // Show a simple message that weather is unavailable
+    // To fix this, you would need a proxy server similar to the Wiener Linien proxy
+    document.getElementById('weather').innerHTML = 
+        '<div class="weather-error">Wetterdaten derzeit nicht verfügbar</div>';
 }
 
 // Display weather data from Geosphere API
@@ -383,7 +392,8 @@ function displayStationData(data, stationIndex) {
                                 allDepartures.push({
                                     line: line.name,
                                     destination: line.towards || line.direction || 'Unbekannt',
-                                    minutes: parseInt(dep.departureTime.countdown, 10) || 0
+                                    minutes: parseInt(dep.departureTime.countdown, 10) || 0,
+                                    vehicleType: dep.vehicle ? dep.vehicle.type : null
                                 });
                             }
                         }
@@ -395,7 +405,8 @@ function displayStationData(data, stationIndex) {
                             allDepartures.push({
                                 line: line.name,
                                 destination: line.towards || line.direction || 'Unbekannt',
-                                minutes: parseInt(departure, 10) || 0
+                                minutes: parseInt(departure, 10) || 0,
+                                vehicleType: null // Old format doesn't have vehicle type
                             });
                         }
                     }
@@ -417,8 +428,9 @@ function displayStationData(data, stationIndex) {
         for (var d = 0; d < displayCount; d++) {
             var dep = allDepartures[d];
             var timeClass = dep.minutes <= 2 ? 'soon' : (dep.minutes <= 5 ? 'in-time' : '');
+            var lineColor = getLineColor(dep.line, dep.vehicleType);
             html += '<li class="departure-item">';
-            html += '<span class="departure-line">' + dep.line + '</span>';
+            html += '<span class="departure-line wiener-linien-badge" style="background-color: ' + lineColor + ';">' + dep.line + '</span>';
             html += '<span class="departure-destination">' + dep.destination + '</span>';
             html += '<span class="departure-time ' + timeClass + '">' + formatTime(dep.minutes) + '</span>';
             html += '</li>';
@@ -443,7 +455,8 @@ function updateLastUpdateTime() {
 
 // Refresh all data
 function refreshAll() {
-    fetchWeather();
+    // Weather disabled due to CORS issues with Geosphere API
+    // fetchWeather();
     
     for (var i = 0; i < CONFIG.stations.length; i++) {
         fetchStationData(CONFIG.stations[i].id, i);
