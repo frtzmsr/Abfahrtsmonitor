@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Abfahrtsmonitor">
+    <meta name="theme-color" content="#f2f2f7">
+    <title>Abfahrtsmonitor - Wiener Linien</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Abfahrtsmonitor</h1>
+            <div class="weather-container" id="weather">
+                <div class="weather-loading">Wetter wird geladen...</div>
+            </div>
+        </header>
+
+        <main>
+            <div class="stations-container">
+                <div class="station" id="station-1">
+                    <h2 class="station-name">Station 1</h2>
+                    <div class="station-loading">Daten werden geladen...</div>
+                </div>
+                <div class="station" id="station-2">
+                    <h2 class="station-name">Station 2</h2>
+                    <div class="station-loading">Daten werden geladen...</div>
+                </div>
+                <div class="station" id="station-3">
+                    <h2 class="station-name">Station 3</h2>
+                    <div class="station-loading">Daten werden geladen...</div>
+                </div>
+                <div class="station" id="station-4">
+                    <h2 class="station-name">Station 4</h2>
+                    <div class="station-loading">Daten werden geladen...</div>
+                </div>
+                <div class="station" id="station-5">
+                    <h2 class="station-name">Station 5</h2>
+                    <div class="station-loading">Daten werden geladen...</div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <div class="last-update" id="lastUpdate"></div>
+            <div class="refresh-info">Aktualisiert sich alle 30 Sekunden</div>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
