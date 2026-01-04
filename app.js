@@ -16,14 +16,25 @@ function makeRequest(url, callback, errorCallback) {
                 }
             } else {
                 if (errorCallback) {
-                    errorCallback('Fehler beim Abrufen der Daten: ' + xhr.status);
+                    var errorMsg = 'Fehler beim Abrufen der Daten: ' + xhr.status;
+                    if (xhr.responseText) {
+                        try {
+                            var errorData = JSON.parse(xhr.responseText);
+                            if (errorData.detail || errorData.message) {
+                                errorMsg += ' - ' + (errorData.detail || errorData.message);
+                            }
+                        } catch (e) {
+                            // Ignore parse errors
+                        }
+                    }
+                    errorCallback(errorMsg);
                 }
             }
         }
     };
     xhr.onerror = function() {
         if (errorCallback) {
-            errorCallback('Netzwerkfehler');
+            errorCallback('Netzwerkfehler (möglicherweise CORS)');
         }
     };
     xhr.open('GET', url, true);
@@ -39,6 +50,24 @@ function formatTime(minutes) {
     } else {
         return minutes + ' Min';
     }
+}
+
+// Favorite line management (using localStorage)
+function getFavoriteKey(stationId, line, destination) {
+    return 'favorite_' + stationId + '_' + line + '_' + destination;
+}
+
+function isFavorite(stationId, line, destination) {
+    var key = getFavoriteKey(stationId, line, destination);
+    var stored = localStorage.getItem(key);
+    return stored === 'true';
+}
+
+function toggleFavorite(stationId, line, destination) {
+    var key = getFavoriteKey(stationId, line, destination);
+    var isFav = isFavorite(stationId, line, destination);
+    localStorage.setItem(key, (!isFav).toString());
+    return !isFav;
 }
 
 // Get Wiener Linien official color for a line
@@ -82,24 +111,19 @@ function getLineColor(lineName, vehicleType) {
     return '#0b295d';
 }
 
-// Get weather data from Geosphere Austria API
-// Documentation: https://dataset.api.hub.geosphere.at/v1/docs/
+// Fetch weather data from Geosphere Austria API
+// Documentation: https://github.com/Geosphere-Austria/dataset-api-docs/blob/main/src/getting-started.md
 function fetchWeather() {
-    // Geosphere Austria Dataset API - TAWES weather stations
-    // Station 11035 = Wien-Hohe Warte (main Vienna weather station)
-    // Parameters: TL (temperature), RF (humidity), FF (wind speed)
-    var stationId = CONFIG.geosphereStationId || '11035';
-    
-    // Correct Geosphere API endpoint structure:
-    // https://dataset.api.hub.geosphere.at/v1/station/current/tawes-v1-10min?parameters=TL,RF,FF&station_ids=11035&output_format=json
-    var apiUrl = 'https://dataset.api.hub.geosphere.at/v1/station/current/tawes-v1-10min?parameters=TL,RF,FF&station_ids=' + 
-                 stationId + '&output_format=json';
+    var stationId = CONFIG.geosphereStationId || '11035'; // Default: Wien-Hohe Warte
+    var baseUrl = 'https://dataset.api.hub.geosphere.at/v1';
+    var endpoint = baseUrl + '/station/current/tawes-v1-10min';
+    // Format: parameters=TL,RF,FF&station_ids=11035 (no output_format needed, JSON is default)
+    var apiUrl = endpoint + '?parameters=TL,RF,FF&station_ids=' + stationId;
     
     // Use proxy if configured, otherwise try direct API call
     var url;
     if (CONFIG.geosphereProxy) {
         // Proxy expects the Geosphere API URL as a parameter
-        // Format: proxy?url=ENCODED_API_URL
         var proxyBase = CONFIG.geosphereProxy.replace(/\/$/, ''); // Remove trailing slash
         url = proxyBase + '?url=' + encodeURIComponent(apiUrl);
     } else {
@@ -107,50 +131,26 @@ function fetchWeather() {
     }
     
     console.log('Fetching weather from:', url);
-    console.log('Geosphere API URL:', apiUrl);
-    console.log('Proxy base URL:', CONFIG.geosphereProxy);
     
     makeRequest(url, function(data) {
         console.log('Weather data received:', data);
-        // Check if the response is actually an error message
-        if (data && typeof data === 'object') {
-            if (data.error || (data.message && data.message !== 'OK')) {
-                console.log('Proxy returned error:', data);
-                var errorText = data.error || data.message || 'Unbekannter Fehler';
-                document.getElementById('weather').innerHTML = 
-                    '<div class="weather-error">Wetterdaten konnten nicht geladen werden: ' + 
-                    errorText + '</div>';
-                return;
-            }
-        }
-        displayGeosphereWeather(data);
+        displayWeather(data);
     }, function(error) {
         console.log('Weather fetch error:', error);
-        // Show error message with more details
-        if (!CONFIG.geosphereProxy) {
-            document.getElementById('weather').innerHTML = 
-                '<div class="weather-error">Wetterdaten benötigen Proxy-Server (CORS-Fehler)</div>';
-        } else {
-            // Check if it's a 404 - proxy might not be configured correctly
-            var errorMsg = error;
-            var helpText = '';
-            if (error.indexOf('404') !== -1 || error.indexOf('Not Found') !== -1) {
-                errorMsg = 'Proxy-Server antwortet nicht (404)';
-                helpText = '<br><small style="opacity: 0.7;">Hinweis: Der Proxy-Server existiert möglicherweise nicht oder ist nicht korrekt konfiguriert. Bitte überprüfen Sie die Proxy-URL in config.js und stellen Sie sicher, dass der Cloudflare Worker bereitgestellt wurde.</small>';
-            } else if (error.indexOf('CORS') !== -1) {
-                errorMsg = 'CORS-Fehler beim Proxy';
-                helpText = '<br><small style="opacity: 0.7;">Der Proxy muss CORS-Header setzen. Bitte überprüfen Sie die Proxy-Konfiguration.</small>';
-            }
-            document.getElementById('weather').innerHTML = 
-                '<div class="weather-error">Wetterdaten konnten nicht geladen werden: ' + errorMsg + helpText + '</div>';
+        var errorMsg = error;
+        if (!CONFIG.geosphereProxy && error.indexOf('422') !== -1) {
+            errorMsg = 'CORS-Fehler: Proxy-Server erforderlich (siehe config.js)';
         }
+        document.getElementById('weather').innerHTML = 
+            '<h2 class="station-name">Wetter</h2>' +
+            '<div class="station-error">Wetterdaten konnten nicht geladen werden: ' + errorMsg + '</div>';
     });
 }
 
 // Display weather data from Geosphere TAWES API
-// TAWES API returns: { "timestamps": [...], "parameters": { "TL": { "11035": [...] }, "RF": { "11035": [...] } } }
-function displayGeosphereWeather(data) {
-    var weatherHtml = '<div class="weather-info">';
+function displayWeather(data) {
+    var weatherHtml = '<h2 class="station-name">Wetter</h2>';
+    weatherHtml += '<div class="weather-info">';
     
     var temp = null;
     var humidity = null;
@@ -158,28 +158,31 @@ function displayGeosphereWeather(data) {
     var icon = '🌤️';
     var description = 'Aktuelles Wetter';
     
-    // Parse TAWES API response structure
-    // Format: { "timestamps": [...], "parameters": { "TL": { "11035": [value] }, "RF": { "11035": [value] }, "FF": { "11035": [value] } } }
-    if (data.parameters) {
-        var stationId = CONFIG.geosphereStationId || '11035';
-        
-        // TL = Temperature (Lufttemperatur)
-        if (data.parameters.TL && data.parameters.TL[stationId] && data.parameters.TL[stationId].length > 0) {
-            temp = data.parameters.TL[stationId][data.parameters.TL[stationId].length - 1]; // Get latest value
-        }
-        
-        // RF = Relative Humidity (Relative Feuchte)
-        if (data.parameters.RF && data.parameters.RF[stationId] && data.parameters.RF[stationId].length > 0) {
-            humidity = data.parameters.RF[stationId][data.parameters.RF[stationId].length - 1]; // Get latest value
-        }
-        
-        // FF = Wind Speed (Windgeschwindigkeit)
-        if (data.parameters.FF && data.parameters.FF[stationId] && data.parameters.FF[stationId].length > 0) {
-            windSpeed = data.parameters.FF[stationId][data.parameters.FF[stationId].length - 1]; // Get latest value
+    // Parse TAWES API response structure (GeoJSON FeatureCollection format)
+    // Format: { "features": [{ "properties": { "parameters": { "TL": { "data": [value] }, "RF": { "data": [value] }, "FF": { "data": [value] } } } }] }
+    if (data && data.features && data.features.length > 0) {
+        var feature = data.features[0];
+        if (feature.properties && feature.properties.parameters) {
+            var params = feature.properties.parameters;
+            
+            // TL = Temperature (Lufttemperatur) - unit: °C
+            if (params.TL && params.TL.data && params.TL.data.length > 0) {
+                temp = params.TL.data[0];
+            }
+            
+            // RF = Relative Humidity (Relative Feuchte) - unit: %
+            if (params.RF && params.RF.data && params.RF.data.length > 0) {
+                humidity = params.RF.data[0];
+            }
+            
+            // FF = Wind Speed (Windgeschwindigkeit) - unit: m/s (convert to km/h)
+            if (params.FF && params.FF.data && params.FF.data.length > 0) {
+                windSpeed = params.FF.data[0] * 3.6; // Convert m/s to km/h
+            }
         }
     }
     
-    // Determine weather icon based on temperature and conditions
+    // Determine weather icon based on temperature
     if (temp !== null && temp !== undefined) {
         if (temp > 25) {
             icon = '☀️';
@@ -219,7 +222,6 @@ function displayGeosphereWeather(data) {
         weatherHtml += '</div>';
         weatherHtml += '</div>';
     } else {
-        // No data available
         weatherHtml += '<span class="weather-icon">' + icon + '</span>';
         weatherHtml += '<div class="weather-details">';
         weatherHtml += '<div class="weather-desc">' + description + '</div>';
@@ -379,16 +381,12 @@ function displayStationData(data, stationIndex) {
         }
         
         if (monitorsExists) {
-            html += '<div class="station-error">Keine Abfahrten verfügbar (leeres Monitors-Array)</div>';
-            html += '<div style="font-size: 11px; color: #666; margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 5px;">';
-            html += '<strong>Hinweis:</strong> Die API antwortet, aber die Monitors-Liste ist leer.<br>';
-            html += 'Mögliche Ursachen:<br>';
-            html += '• Station-ID ist falsch oder nicht im richtigen Format<br>';
-            html += '• Falscher Parameter-Name (rbl/stopId/diva)<br>';
-            html += '• Station hat aktuell keine Abfahrten<br>';
-            html += '• Proxy benötigt eine andere ID-Format<br><br>';
-            html += 'Bitte überprüfen Sie die Station-ID in der Konfiguration.';
-            html += '</div>';
+            // API responded successfully but no departures available (e.g., at night)
+            html += '<ul class="departures-list">';
+            html += '<li class="departure-item">Keine Abfahrten in den nächsten Minuten</li>';
+            html += '</ul>';
+            stationEl.innerHTML = html;
+            return true; // Return true to indicate successful display
         } else {
             html += '<div class="station-error">Keine Abfahrtsdaten verfügbar</div>';
             
@@ -476,11 +474,14 @@ function displayStationData(data, stationIndex) {
     if (displayCount === 0) {
         html += '<li class="departure-item">Keine Abfahrten in den nächsten Minuten</li>';
     } else {
+        var stationId = CONFIG.stations[stationIndex].id;
         for (var d = 0; d < displayCount; d++) {
             var dep = allDepartures[d];
             var timeClass = dep.minutes <= 2 ? 'soon' : (dep.minutes <= 5 ? 'in-time' : '');
             var lineColor = getLineColor(dep.line, dep.vehicleType);
-            html += '<li class="departure-item">';
+            var isFav = isFavorite(stationId, dep.line, dep.destination);
+            var favoriteClass = isFav ? ' favorite' : '';
+            html += '<li class="departure-item' + favoriteClass + '" data-station-id="' + stationId + '" data-line="' + dep.line.replace(/"/g, '&quot;') + '" data-destination="' + dep.destination.replace(/"/g, '&quot;') + '">';
             html += '<span class="departure-line wiener-linien-badge" style="background-color: ' + lineColor + ';">' + dep.line + '</span>';
             html += '<span class="departure-destination">' + dep.destination + '</span>';
             html += '<span class="departure-time ' + timeClass + '">' + formatTime(dep.minutes) + '</span>';
@@ -490,6 +491,20 @@ function displayStationData(data, stationIndex) {
     
     html += '</ul>';
     stationEl.innerHTML = html;
+    
+    // Add click handlers to departure items for favoriting
+    var departureItems = stationEl.querySelectorAll('.departure-item[data-station-id]');
+    for (var i = 0; i < departureItems.length; i++) {
+        departureItems[i].addEventListener('click', function(e) {
+            var stationId = this.getAttribute('data-station-id');
+            var line = this.getAttribute('data-line');
+            var destination = this.getAttribute('data-destination');
+            toggleFavorite(stationId, line, destination);
+            // Refresh the station display
+            fetchStationData(stationId, stationIndex);
+        });
+    }
+    
     return true; // Return true to indicate successful display
 }
 
@@ -510,6 +525,7 @@ function refreshAll() {
         fetchStationData(CONFIG.stations[i].id, i);
     }
     
+    fetchWeather();
     updateLastUpdateTime();
 }
 

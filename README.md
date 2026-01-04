@@ -1,29 +1,17 @@
 # Abfahrtsmonitor - Wiener Linien
 
-Eine einfache Website zur Anzeige von Abfahrtszeiten der Wiener Linien und aktuellen Wetterdaten, optimiert für ältere Geräte wie das iPad Air 2.
+Eine einfache Website zur Anzeige von Abfahrtszeiten der Wiener Linien, optimiert für ältere Geräte wie das iPad Air 2.
 
 ## Features
 
 - 📍 Anzeige der Abfahrtszeiten für 5 favorisierte Stationen
-- 🌤️ Aktuelles Wetter an Ihrem Standort
 - 🔄 Automatische Aktualisierung alle 30 Sekunden
 - 📱 Optimiert für iPad Air 2 und ältere Browser
 - 🎨 Modernes, responsives Design
 
 ## Setup-Anleitung
 
-### 1. Geosphere Austria API (kein API-Schlüssel erforderlich)
-
-Die Website verwendet die Geosphere Austria API für Wetterdaten. Diese API ist kostenlos und erfordert normalerweise keinen API-Schlüssel für grundlegende Nutzung.
-
-**Informationen:**
-- Geosphere Austria ist der offizielle österreichische Wetterdienst
-- API-Dokumentation: [dataset.api.hub.geosphere.at](https://dataset.api.hub.geosphere.at/v1/docs/)
-- Die Website verwendet standardmäßig die Wetterstation Wien-Hohe Warte (ID: 11035)
-
-**Hinweis:** Falls die API-Endpunkte geändert wurden oder CORS-Probleme auftreten, können Sie die Endpunkte in `app.js` anpassen.
-
-### 2. Wiener Linien Station IDs finden
+### 1. Wiener Linien Station IDs finden
 
 Die Wiener Linien verwenden RBL-IDs (Realtime Base List) für ihre Stationen. Sie können die IDs auf verschiedene Weise finden:
 
@@ -41,22 +29,12 @@ Die Wiener Linien verwenden RBL-IDs (Realtime Base List) für ihre Stationen. Si
 - Öffnen Sie: `https://www.wienerlinien.at/ogd_realtime/monitor?rbl=STATION_ID`
 - Ersetzen Sie `STATION_ID` mit verschiedenen IDs, bis Sie die richtige finden
 
-### 3. Konfiguration
+### 2. Konfiguration
 
 Öffnen Sie die Datei `config.js` und passen Sie folgende Werte an:
 
 ```javascript
 var CONFIG = {
-    // Geosphere Austria API (kein API-Schlüssel erforderlich)
-    useGeosphereApi: true,
-    
-    // Ihre Koordinaten (optional, Standard ist Wien Zentrum)
-    latitude: 48.2082,  // Ihre Breitengrad
-    longitude: 16.3738, // Ihr Längengrad
-    
-    // Geosphere Wetterstation ID (optional, Standard ist Wien-Hohe Warte)
-    geosphereStationId: '11035', // Wien-Hohe Warte
-    
     // Ihre 5 favorisierten Stationen
     stations: [
         {
@@ -64,15 +42,17 @@ var CONFIG = {
             name: 'Schwedenplatz'  // Name der Station
         },
         // ... weitere Stationen
-    ]
+    ],
+    
+    // Refresh-Intervall in Millisekunden (Standard: 30000 = 30 Sekunden)
+    refreshInterval: 30000,
+    
+    // Proxy-Server für Wiener Linien API (optional)
+    wienerLinienProxy: 'https://wienerlinien-proxy.people-02-reasons.workers.dev'
 };
 ```
 
-**Koordinaten finden:**
-- Verwenden Sie [Google Maps](https://www.google.com/maps) und klicken Sie auf Ihren Standort
-- Die Koordinaten werden in der URL oder im Popup angezeigt
-
-### 4. Website verwenden
+### 3. Website verwenden
 
 **Lokale Verwendung:**
 1. Öffnen Sie `index.html` direkt im Browser
@@ -110,22 +90,11 @@ Die Website ist optimiert für:
 
 ## API-Limits
 
-**Geosphere Austria:**
-- Kostenloser Zugang zu Wetterdaten
-- Bitte beachten Sie die [Nutzungsbedingungen](https://www.geosphere.at/)
-- Bei 30 Sekunden Refresh-Intervall: ~2.880 Aufrufe/Tag
-
 **Wiener Linien:**
 - Keine bekannten Limits für Open Data
 - Bitte beachten Sie die [Nutzungsbedingungen](https://www.wienerlinien.at/open-data)
 
 ## Fehlerbehebung
-
-**Wetter wird nicht angezeigt:**
-- Überprüfen Sie die Browser-Konsole auf Fehlermeldungen
-- Stellen Sie sicher, dass die Geosphere API erreichbar ist
-- Falls CORS-Fehler auftreten, benötigen Sie möglicherweise einen Proxy-Server
-- Die API-Endpunkte können sich geändert haben - überprüfen Sie die [Geosphere API-Dokumentation](https://dataset.api.hub.geosphere.at/v1/docs/)
 
 **Stationen zeigen keine Daten:**
 - Überprüfen Sie, ob die DIVA-IDs korrekt sind
@@ -154,14 +123,13 @@ Falls Sie einen eigenen Proxy erstellen möchten:
 ## Lizenz
 
 Diese Website verwendet:
-- Geosphere Austria API (kostenlos, österreichischer Wetterdienst)
 - Wiener Linien Open Data (CC BY 4.0)
 
 ## Support
 
 Bei Problemen:
 1. Überprüfen Sie die Browser-Konsole auf Fehlermeldungen
-2. Stellen Sie sicher, dass alle API-Schlüssel korrekt konfiguriert sind
+2. Stellen Sie sicher, dass die Station-IDs korrekt konfiguriert sind
 3. Testen Sie die API-Endpunkte direkt im Browser
 
 ## Anpassungen

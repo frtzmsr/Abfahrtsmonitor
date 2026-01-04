@@ -1,21 +1,7 @@
 // Configuration file for Abfahrtsmonitor
-// Please fill in your API keys and station IDs
+// Please fill in your station IDs
 
 var CONFIG = {
-    // Geosphere Austria API
-    // The Geosphere API is free and doesn't require an API key for basic usage
-    // For more information: https://dataset.api.hub.geosphere.at/v1/docs/
-    // Note: Some endpoints may require registration
-    useGeosphereApi: true,
-    
-    // Vienna coordinates (you can change these to your exact location)
-    latitude: 48.2082,
-    longitude: 16.3738,
-    
-    // Geosphere station ID for Vienna (optional, can be auto-detected)
-    // Common Vienna weather stations: 11035 (Wien-Hohe Warte), 11040 (Wien-Innere Stadt)
-    geosphereStationId: '11035', // Wien-Hohe Warte (default Vienna weather station)
-    
     // Wiener Linien Station IDs (DIVA IDs)
     // You can find station IDs at: https://www.wienerlinien.at/web/wl-en/traffic-information
     // Or use the Open Data Portal: https://www.wienerlinien.at/open-data
@@ -49,8 +35,14 @@ var CONFIG = {
     // Your proxy server URL
     wienerLinienProxy: 'https://wienerlinien-proxy.people-02-reasons.workers.dev',
     
+    // Geosphere Austria API weather station
+    // Station ID for weather data (default: 11035 = Wien-Hohe Warte)
+    // Documentation: https://github.com/Geosphere-Austria/dataset-api-docs/blob/main/src/getting-started.md
+    geosphereStationId: '11035',
+    
     // Proxy server for Geosphere API (to handle CORS issues)
-    // Your Geosphere proxy server URL
-    geosphereProxy: 'https://geosphere.people-02-reasons.workers.dev'
+    // Leave empty to try direct API call (may not work due to CORS)
+    // Your proxy server URL (optional)
+    geosphereProxy: ''
 };
 
